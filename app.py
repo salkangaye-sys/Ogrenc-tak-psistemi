@@ -57,7 +57,7 @@ HTML_LAYOUT = """
         .ogrenci-card { background: #e9ecef; padding: 12px; margin-top: 10px; border-radius: 5px; }
         .rapor-card { background: #f8f9fa; border-left: 4px solid #007bff; padding: 10px; margin: 8px 0; border-radius: 4px; }
         .flex-btns { display: flex; gap: 5px; margin-top: 5px; }
-        .audio-box { background: #e3f2fd; padding: 10px; border-radius: 5px; margin: 5px 0; }
+        .audio-box { background: #e3f2fd; padding: 10px; border-radius: 5px; margin: 10px 0; border: 1px dashed #007bff; }
     </style>
 </head>
 <body>
@@ -83,7 +83,7 @@ HTML_LAYOUT = """
         <textarea id="notlar" rows="3" placeholder="Ders notu yazın..."></textarea>
         
         <div class="audio-box">
-            <label><strong>🎙️ Ses Kaydı / Dosyası Ekle:</strong></label>
+            <label><strong>🎙️ Ses Kaydı veya Ses Dosyası Yükle:</strong></label>
             <input type="file" id="sesDosyasi" accept="audio/*">
         </div>
 
