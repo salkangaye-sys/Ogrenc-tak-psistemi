@@ -52,10 +52,12 @@ HTML_LAYOUT = """
         button { background: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; }
         .btn-danger { background: #dc3545; }
         .btn-warning { background: #ffc107; color: black; }
+        .btn-success { background: #28a745; }
         .btn-sm { width: auto; padding: 5px 10px; font-size: 12px; margin-right: 5px; display: inline-block; }
         .ogrenci-card { background: #e9ecef; padding: 12px; margin-top: 10px; border-radius: 5px; }
         .rapor-card { background: #f8f9fa; border-left: 4px solid #007bff; padding: 10px; margin: 8px 0; border-radius: 4px; }
         .flex-btns { display: flex; gap: 5px; margin-top: 5px; }
+        .audio-box { background: #e3f2fd; padding: 10px; border-radius: 5px; margin: 5px 0; }
     </style>
 </head>
 <body>
@@ -69,7 +71,7 @@ HTML_LAYOUT = """
         <button onclick="ogrenciEkle()">Kaydet</button>
     </div>
 
-    <!-- Rapor / Not Ekleme Formu -->
+    <!-- Rapor / Not & Ses Ekleme Formu -->
     <div class="box">
         <h3>Öğrenciye Not & Ses Kaydı Ekle</h3>
         <select id="seciliOgrenci">
@@ -79,7 +81,13 @@ HTML_LAYOUT = """
             {% endfor %}
         </select>
         <textarea id="notlar" rows="3" placeholder="Ders notu yazın..."></textarea>
-        <button onclick="raporEkle()">Notu Kaydet</button>
+        
+        <div class="audio-box">
+            <label><strong>🎙️ Ses Kaydı / Dosyası Ekle:</strong></label>
+            <input type="file" id="sesDosyasi" accept="audio/*">
+        </div>
+
+        <button onclick="raporEkle()">Notu ve Sesi Kaydet</button>
     </div>
 
     <!-- Öğrenci ve Geçmiş Notlar Listesi -->
@@ -120,18 +128,26 @@ HTML_LAYOUT = """
         async function raporEkle() {
             let ogrenci_id = document.getElementById('seciliOgrenci').value;
             let notlar = document.getElementById('notlar').value;
+            let sesInput = document.getElementById('sesDosyasi');
+
             if(!ogrenci_id) return alert('Lütfen öğrenci seçin');
 
             let formData = new FormData();
             formData.append('ogrenci_id', ogrenci_id);
             formData.append('notlar', notlar);
 
+            if (sesInput.files.length > 0) {
+                formData.append('ses', sesInput.files[0]);
+            }
+
             await fetch('/rapor-ekle', {
                 method: 'POST',
                 body: formData
             });
-            alert('Not kaydedildi!');
+
+            alert('Not ve Ses Kaydı Başarıyla Eklendi!');
             document.getElementById('notlar').value = '';
+            sesInput.value = '';
             raporlariYukle(ogrenci_id);
         }
 
@@ -225,10 +241,12 @@ def rapor_ekle():
     notlar = request.form.get('notlar')
     tarih = datetime.now().strftime("%d.%m.%Y %H:%M")
     ses_dosya_adi = None
+
     if 'ses' in request.files:
         ses_file = request.files['ses']
         if ses_file.filename != '':
-            dosya_adi = f"ogrenci_{ogrenci_id}_{int(datetime.now().timestamp())}.webm"
+            uzanti = ses_file.filename.split('.')[-1]
+            dosya_adi = f"ogrenci_{ogrenci_id}_{int(datetime.now().timestamp())}.{uzanti}"
             ses_file.save(os.path.join(app.config['UPLOAD_FOLDER'], dosya_adi))
             ses_dosya_adi = dosya_adi
 
