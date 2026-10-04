@@ -480,5 +480,12 @@ HTML_LAYOUT = """
             method: 'POST',
             body: formData
         }).then(() => {
-            document.getElementById('muzikBaslik').value = '';
-            document.getElementById('muzikDosyasi').value =
+document.getElementById('muzikDosyasi').value = '';
+            alert('Müzik başarıyla yüklendi!');
+            location.reload();
+        });
+}
+</script>
+</body>
+</html>
+"""
