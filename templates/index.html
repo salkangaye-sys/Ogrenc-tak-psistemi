@@ -44,6 +44,8 @@
         input, select, textarea { width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
         button { background-color: #3498db; color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 14px; }
         button:hover { background-color: #2980b9; }
+        .play-btn { background-color: #2ecc71; color: white; margin-top: 5px; }
+        .play-btn:hover { background-color: #27ae60; }
         .delete-btn { background-color: #e74c3c; padding: 5px 10px; font-size: 12px; float: right; }
         .card { background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 12px; }
         
@@ -112,7 +114,7 @@
                 <option value="AYT">AYT</option>
             </select>
             <select id="sinavAy">
-                <option value="Eylul">Eylül</option>
+                <option value="Eylul">Eylul</option>
                 <option value="Ekim">Ekim</option>
                 <option value="Kasim">Kasım</option>
                 <option value="Aralik">Aralık</option>
@@ -159,47 +161,35 @@
             </table>
         </div>
 
-        <!-- BLOK 4: Gözlem Notları, Müzik ve Ses Kayıtları -->
+        <!-- BLOK 4: Gözlem Notları, Müzik ve Ses Kayıtları (KALICI YÜKLEME) -->
         <div class="block-header" onclick="toggleBlock('block4')">
-            <span>📝 4. Gözlem Notları, Müzik ve Ses Kayıtları</span>
+            <span>📝 4. Gözlem Notları & Kalıcı Müzik/Ses Yükleme</span>
             <span id="icon-block4">➕</span>
         </div>
         <div id="block4" class="block-content">
             <select id="ogrenciSec"><option value="">Öğrenci Seçin...</option></select>
             <textarea id="notMetni" rows="3" placeholder="Öğrenci ile ilgili gözlem notları veya müzik açıklaması..."></textarea>
             
-            <label><b>🎵 Müzik veya Ses Dosyası Yükleyin (.mp3, .wav, .m4a):</b></label>
+            <label><b>🎵 Kalıcı Müzik/Ses Dosyası Yükleyin (.mp3, .wav, .m4a):</b></label>
             <input type="file" id="sesDosyasi" accept="audio/*">
-            <button onclick="raporEkle()">Not ve Müzik Kaydını Yükle</button>
+            <button onclick="raporEkle()">Sisteme Yükle ve Kaydet</button>
 
             <hr style="margin: 20px 0;">
-            <h3>📋 Öğrenci Not ve Müzik Geçmişi</h3>
+            <h3>📋 Kayıtlı Notlar ve Müzik Kütüphanesi</h3>
             <select id="filtreOgrenci" onchange="notlariGetir()">
-                <option value="">Tüm Öğrencilerin Notlarını Göster</option>
+                <option value="">Tüm Öğrencilerin Notlarını/Müziklerini Göster</option>
             </select>
             <div id="gecmisNotlarListesi"></div>
-        </div>
-
-        <!-- BLOK 5: ARKA PLANDA MÜZİK DİNLEME ALANI -->
-        <div class="block-header" onclick="toggleBlock('block5')">
-            <span>🎧 5. Arka Plan Müzik Çalar</span>
-            <span id="icon-block5">➕</span>
-        </div>
-        <div id="block5" class="block-content">
-            <p>Sistemde çalışırken dinlemek istediğiniz bir müzik dosyasını seçin ve oynatın. Müzik alt çubukta kesintisiz çalmaya devam edecektir.</p>
-            <label><b>Özel Müzik Dosyası Seçin:</b></label>
-            <input type="file" id="bgMuzikDosyasi" accept="audio/*">
-            <button onclick="arkaplanMuzikCal()">Müziği Oynatıcıya Yükle ve Çal ▶️</button>
         </div>
     </div>
 
     <!-- SABİT ALT MÜZİK ÇALAR BAR -->
     <div class="sticky-player-bar">
         <div class="player-info">
-            <span>🎵 Çalıyor:</span>
+            <span>🎵 Arka Plan Müzik:</span>
             <span id="nowPlayingTitle" style="color: #2ecc71;">Henüz müzik seçilmedi</span>
         </div>
-        <audio id="mainAudioPlayer" controls></audio>
+        <audio id="mainAudioPlayer" controls autoplay></audio>
     </div>
 
     <script>
@@ -222,30 +212,13 @@
             }
         }
 
-        // ARKA PLAN MÜZİK DİNLEME FONKSİYONU
-        function arkaplanMuzikCal() {
-            const fileInput = document.getElementById('bgMuzikDosyasi');
-            const file = fileInput.files[0];
-            const player = document.getElementById('mainAudioPlayer');
-            const title = document.getElementById('nowPlayingTitle');
-
-            if (!file) {
-                return alert('Lütfen dinlemek için bir müzik dosyası seçin!');
-            }
-
-            const objectURL = URL.createObjectURL(file);
-            player.src = objectURL;
-            player.play();
-            title.innerText = file.name;
-        }
-
-        // YÜKLENEN NOTLARDAN MÜZİK ÇALMA
+        // SİSTEMDEKİ KALICI MÜZİĞİ ALT ÇUBUKTA ÇALMA FONKSİYONU
         function oynatGecmisMuzik(url, isim) {
             const player = document.getElementById('mainAudioPlayer');
             const title = document.getElementById('nowPlayingTitle');
             player.src = url;
             player.play();
-            title.innerText = isim + " - Kayıtlı Ses/Müzik";
+            title.innerText = isim;
         }
 
         function ogrencileriGetir() {
@@ -366,7 +339,7 @@
                 document.getElementById('notMetni').value = '';
                 document.getElementById('sesDosyasi').value = '';
                 notlariGetir();
-                alert('Not ve Müzik kaydı eklendi!');
+                alert('Not ve Müzik kaydı başarıyla yüklendi!');
             });
         }
 
@@ -384,8 +357,10 @@
                         <p>${item.notlar || '<i>Açıklama/not girilmedi.</i>'}</p>`;
                     if (item.ses_dosyasi) {
                         const fileUrl = '/uploads/' + item.ses_dosyasi;
+                        const songLabel = (item.notlar ? item.notlar.substring(0, 30) : item.ad_soyad + ' - Müzik/Ses');
                         html += `<div style="margin-top:10px;">
-                            <button onclick="oynatGecmisMuzik('${fileUrl}', '${item.ad_soyad}')">▶️ Alt Çubukta Çal</button>
+                            <button class="play-btn" onclick="oynatGecmisMuzik('${fileUrl}', '${songLabel.replace(/'/g, "\\'")}')">▶️ Alt Çubukta Çal (Kesintisiz)</button>
+                            <a href="${fileUrl}" download style="margin-left:10px; font-size:12px; color:#3498db;">⬇️ Cihaza İndir</a>
                         </div>`;
                     }
                     html += `</div>`;
@@ -395,7 +370,7 @@
         }
 
         function notSil(id) {
-            if (!confirm('Bu not/müzik kaydını silmek istiyor musunuz?')) return;
+            if (!confirm('Bu kaydı silmek istiyor musunuz?')) return;
             fetch('/api/not_sil/' + id, { method: 'DELETE' }).then(() => notlariGetir());
         }
     </script>
