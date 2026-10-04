@@ -5,7 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Öğrenci Takip Sistemi</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f4f7f6; 
+            margin: 0; 
+            padding: 20px; 
+            padding-bottom: 110px; /* Sabit müzik çalar için alt boşluk */
+            color: #333; 
+        }
         .container { max-width: 900px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         h1 { color: #2c3e50; text-align: center; margin-bottom: 25px; }
         
@@ -44,6 +51,37 @@
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background-color: #2c3e50; color: white; }
         tr:nth-child(even) { background-color: #f9f9f9; }
+
+        /* Sabit Arka Plan Müzik Çalar Stili */
+        .sticky-player-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: #2c3e50;
+            color: white;
+            padding: 12px 20px;
+            box-shadow: 0 -3px 10px rgba(0,0,0,0.2);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-sizing: border-box;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .player-info {
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .sticky-player-bar audio {
+            max-width: 500px;
+            width: 100%;
+            height: 40px;
+        }
     </style>
 </head>
 <body>
@@ -121,24 +159,47 @@
             </table>
         </div>
 
-        <!-- BLOK 4: Gözlem / Sesli Rapor Ekleme -->
+        <!-- BLOK 4: Gözlem Notları, Müzik ve Ses Kayıtları -->
         <div class="block-header" onclick="toggleBlock('block4')">
-            <span>📝 4. Gözlem ve Not Geçmişi</span>
+            <span>📝 4. Gözlem Notları, Müzik ve Ses Kayıtları</span>
             <span id="icon-block4">➕</span>
         </div>
         <div id="block4" class="block-content">
             <select id="ogrenciSec"><option value="">Öğrenci Seçin...</option></select>
-            <textarea id="notMetni" rows="3" placeholder="Öğrenci ile ilgili gözlem notları..."></textarea>
-            <label>Ses Kaydı / Dosyası Ekleyin:</label>
+            <textarea id="notMetni" rows="3" placeholder="Öğrenci ile ilgili gözlem notları veya müzik açıklaması..."></textarea>
+            
+            <label><b>🎵 Müzik veya Ses Dosyası Yükleyin (.mp3, .wav, .m4a):</b></label>
             <input type="file" id="sesDosyasi" accept="audio/*">
-            <button onclick="raporEkle()">Notu Kaydet</button>
+            <button onclick="raporEkle()">Not ve Müzik Kaydını Yükle</button>
 
             <hr style="margin: 20px 0;">
+            <h3>📋 Öğrenci Not ve Müzik Geçmişi</h3>
             <select id="filtreOgrenci" onchange="notlariGetir()">
                 <option value="">Tüm Öğrencilerin Notlarını Göster</option>
             </select>
             <div id="gecmisNotlarListesi"></div>
         </div>
+
+        <!-- BLOK 5: ARKA PLANDA MÜZİK DİNLEME ALANI -->
+        <div class="block-header" onclick="toggleBlock('block5')">
+            <span>🎧 5. Arka Plan Müzik Çalar</span>
+            <span id="icon-block5">➕</span>
+        </div>
+        <div id="block5" class="block-content">
+            <p>Sistemde çalışırken dinlemek istediğiniz bir müzik dosyasını seçin ve oynatın. Müzik alt çubukta kesintisiz çalmaya devam edecektir.</p>
+            <label><b>Özel Müzik Dosyası Seçin:</b></label>
+            <input type="file" id="bgMuzikDosyasi" accept="audio/*">
+            <button onclick="arkaplanMuzikCal()">Müziği Oynatıcıya Yükle ve Çal ▶️</button>
+        </div>
+    </div>
+
+    <!-- SABİT ALT MÜZİK ÇALAR BAR -->
+    <div class="sticky-player-bar">
+        <div class="player-info">
+            <span>🎵 Çalıyor:</span>
+            <span id="nowPlayingTitle" style="color: #2ecc71;">Henüz müzik seçilmedi</span>
+        </div>
+        <audio id="mainAudioPlayer" controls></audio>
     </div>
 
     <script>
@@ -159,6 +220,32 @@
                 el.style.display = "block";
                 icon.innerText = "➖";
             }
+        }
+
+        // ARKA PLAN MÜZİK DİNLEME FONKSİYONU
+        function arkaplanMuzikCal() {
+            const fileInput = document.getElementById('bgMuzikDosyasi');
+            const file = fileInput.files[0];
+            const player = document.getElementById('mainAudioPlayer');
+            const title = document.getElementById('nowPlayingTitle');
+
+            if (!file) {
+                return alert('Lütfen dinlemek için bir müzik dosyası seçin!');
+            }
+
+            const objectURL = URL.createObjectURL(file);
+            player.src = objectURL;
+            player.play();
+            title.innerText = file.name;
+        }
+
+        // YÜKLENEN NOTLARDAN MÜZİK ÇALMA
+        function oynatGecmisMuzik(url, isim) {
+            const player = document.getElementById('mainAudioPlayer');
+            const title = document.getElementById('nowPlayingTitle');
+            player.src = url;
+            player.play();
+            title.innerText = isim + " - Kayıtlı Ses/Müzik";
         }
 
         function ogrencileriGetir() {
@@ -279,7 +366,7 @@
                 document.getElementById('notMetni').value = '';
                 document.getElementById('sesDosyasi').value = '';
                 notlariGetir();
-                alert('Not eklendi!');
+                alert('Not ve Müzik kaydı eklendi!');
             });
         }
 
@@ -294,20 +381,23 @@
                     html += `<div class="card">
                         <button class="delete-btn" onclick="notSil(${item.id})">Sil</button>
                         <div><b>👤 ${item.ad_soyad} (${item.sinif})</b> - <small>${item.tarih}</small></div>
-                        <p>${item.notlar || '<i>Not girilmedi.</i>'}</p>`;
+                        <p>${item.notlar || '<i>Açıklama/not girilmedi.</i>'}</p>`;
                     if (item.ses_dosyasi) {
-                        html += `<audio controls src="/uploads/${item.ses_dosyasi}"></audio>`;
+                        const fileUrl = '/uploads/' + item.ses_dosyasi;
+                        html += `<div style="margin-top:10px;">
+                            <button onclick="oynatGecmisMuzik('${fileUrl}', '${item.ad_soyad}')">▶️ Alt Çubukta Çal</button>
+                        </div>`;
                     }
                     html += `</div>`;
                 });
-                document.getElementById('gecmisNotlarListesi').innerHTML = html || '<p>Henüz not yok.</p>';
+                document.getElementById('gecmisNotlarListesi').innerHTML = html || '<p>Henüz kayıt bulunamadı.</p>';
             });
         }
 
         function notSil(id) {
-            if (!confirm('Notu silmek istiyor musunuz?')) return;
+            if (!confirm('Bu not/müzik kaydını silmek istiyor musunuz?')) return;
             fetch('/api/not_sil/' + id, { method: 'DELETE' }).then(() => notlariGetir());
         }
     </script>
 </body>
-  </html>
+</html>
