@@ -174,14 +174,14 @@ def api_siralama():
     sinav_turu = request.args.get('sinav_turu', 'TYT')
     conn = sqlite3.connect('ogretmen.db')
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.execute("""
         SELECT ogrenciler.ad_soyad, ogrenciler.sinif, AVG(sinavlar.net) as ortalama_net, COUNT(sinavlar.id) as sinav_sayisi
         FROM sinavlar 
         JOIN ogrenciler ON sinavlar.ogrenci_id = ogrenciler.id
         WHERE sinavlar.sinav_turu = ?
         GROUP BY ogrenciler.id
         ORDER BY ortalama_net DESC
-    ''', (sinav_turu,))
+    """, (sinav_turu,))
     rows = cursor.fetchall()
     conn.close()
     return jsonify([{"ad_soyad": r[0], "sinif": r[1], "ortalama": round(r[2], 2), "sinav_sayisi": r[3]} for r in rows])
