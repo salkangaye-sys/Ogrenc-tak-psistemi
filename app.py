@@ -8,12 +8,14 @@ UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# ---------------------------------------------------------
+# ----------------------------------------------------
 # 1. VERİTABANI KURULUMU
-# ---------------------------------------------------------
+# ----------------------------------------------------
 def init_db():
     conn = sqlite3.connect('ogretmen.db')
     cursor = conn.cursor()
+    
+    # Öğrenciler Tablosu
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ogrenciler (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,23 +23,39 @@ def init_db():
             sinif TEXT
         )
     ''')
+    
+    # Notlar & Ses Kayıtları Tablosu
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS raporlar (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ogrenci_id INTEGER,
             tarih TEXT,
             notlar TEXT,
-            ses_dosyasi TEXT
+            ses_dosyasi TEXT,
+            FOREIGN KEY (ogrenci_id) REFERENCES ogrenciler (id)
         )
     ''')
+    
+    # TYT / AYT Net Takip Tablosu
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS netler (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ogrenci_id INTEGER,
+            ay TEXT,
+            tyt_net REAL,
+            ayt_net REAL,
+            FOREIGN KEY (ogrenci_id) REFERENCES ogrenciler (id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
 init_db()
 
-# ---------------------------------------------------------
-# 2. ARAYÜZ (HTML / CSS / JAVASCRIPT)
-# ---------------------------------------------------------
+# ----------------------------------------------------
+# 2. ARAYÜZ (HTML / CSS / JAVASCRIPT - BLOKLU TASARIM)
+# ----------------------------------------------------
 HTML_LAYOUT = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -46,262 +64,376 @@ HTML_LAYOUT = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Öğrenci Takip Portalı</title>
     <style>
-        body { font-family: sans-serif; padding: 15px; background: #f0f2f5; margin: 0; }
-        .box { background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        input, button, textarea, select { width: 100%; padding: 10px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box; }
-        button { background: #007bff; color: white; border: none; font-weight: bold; cursor: pointer; }
-        .btn-danger { background: #dc3545; }
-        .btn-warning { background: #ffc107; color: black; }
-        .btn-success { background: #28a745; }
-        .btn-sm { width: auto; padding: 5px 10px; font-size: 12px; margin-right: 5px; display: inline-block; }
-        .ogrenci-card { background: #e9ecef; padding: 12px; margin-top: 10px; border-radius: 5px; }
-        .rapor-card { background: #f8f9fa; border-left: 4px solid #007bff; padding: 10px; margin: 8px 0; border-radius: 4px; }
-        .flex-btns { display: flex; gap: 5px; margin-top: 5px; }
-        .audio-box { background: #e3f2fd; padding: 10px; border-radius: 5px; margin: 10px 0; border: 1px dashed #007bff; }
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 25px; }
+        
+        /* SEKME (BLOK) BUTONLARI */
+        .tab-buttons { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid #eee; padding-bottom: 10px; overflow-x: auto; }
+        .tab-btn { flex: 1; padding: 12px 15px; border: none; background: #e9ecef; color: #495057; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.3s; white-space: nowrap; }
+        .tab-btn:hover { background: #dee2e6; }
+        .tab-btn.active { background: #007bff; color: white; }
+        
+        /* BLOK İÇERİKLERİ */
+        .tab-content { display: none; background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; }
+        .tab-content.active { display: block; }
+        
+        /* FORM ELEMANLARI */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+        button.submit-btn { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        button.submit-btn:hover { background: #218838; }
+        
+        /* TABLOLAR VE KARTLAR */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background: #007bff; color: white; }
+        .card { background: white; padding: 15px; border-radius: 6px; border-left: 4px solid #007bff; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .card-header { font-weight: bold; color: #007bff; margin-bottom: 5px; }
+        .card-date { font-size: 12px; color: #777; margin-bottom: 8px; }
+        audio { width: 100%; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <h2>🎓 Öğrenci Takip Sistemi</h2>
+
+<div class="container">
+    <h1>🎓 Öğrenci Takip Sistemi</h1>
     
-    <!-- Öğrenci Ekleme Formu -->
-    <div class="box">
-        <h3>Yeni Öğrenci Ekle</h3>
-        <input type="text" id="ad" placeholder="Ad Soyad">
-        <input type="text" id="sinif" placeholder="Sınıf">
-        <button onclick="ogrenciEkle()">Kaydet</button>
+    <!-- BLOK MENÜSÜ -->
+    <div class="tab-buttons">
+        <button class="tab-btn active" onclick="openTab('ogrenci-block', this)">🗂️ Öğrenciler</button>
+        <button class="tab-btn" onclick="openTab('sesli-not-block', this)">🎙️ Sesli Not Ekle</button>
+        <button class="tab-btn" onclick="openTab('net-block', this)">📈 TYT / AYT Netleri</button>
+        <button class="tab-btn" onclick="openTab('gecmis-notlar-block', this)">📝 Geçmiş Notlar</button>
     </div>
 
-    <!-- Rapor / Not & Ses Ekleme Formu -->
-    <div class="box">
-        <h3>Öğrenciye Not & Ses Kaydı Ekle</h3>
-        <select id="seciliOgrenci">
-            <option value="">-- Öğrenci Seçin --</option>
-            {% for o in ogrenciler %}
-                <option value="{{ o[0] }}">{{ o[1] }} ({{ o[2] }})</option>
-            {% endfor %}
-        </select>
-        <textarea id="notlar" rows="3" placeholder="Ders notu yazın..."></textarea>
+    <!-- 1. BLOK: ÖĞRENCİ EKLE & LİSTELE -->
+    <div id="ogrenci-block" class="tab-content active">
+        <h3>Yeni Öğrenci Ekle</h3>
+        <div class="form-group"><input type="text" id="adSoyad" placeholder="Öğrenci Adı Soyadı"></div>
+        <div class="form-group"><input type="text" id="sinif" placeholder="Sınıfı (Örn: 12-A / TYT)"></div>
+        <button class="submit-btn" onclick="ogrenciEkle()">Kaydet</button>
         
-        <div class="audio-box">
-            <label><strong>🎙️ Ses Kaydı veya Ses Dosyası Yükle:</strong></label>
+        <h3 style="margin-top: 30px;">Kayıtlı Öğrenciler</h3>
+        <div id="ogrenciListesi"></div>
+    </div>
+
+    <!-- 2. BLOK: SESLİ NOT EKLE -->
+    <div id="sesli-not-block" class="tab-content">
+        <h3>Öğrenciye Not & Ses Kaydı Ekle</h3>
+        <div class="form-group">
+            <label>Öğrenci Seçin:</label>
+            <select id="notOgrenciSelect"><option value="">Yükleniyor...</option></select>
+        </div>
+        <div class="form-group">
+            <label>Ders Notu / Açıklama:</label>
+            <textarea id="dersNotu" rows="4" placeholder="Öğrencinin durumuyla ilgili notlar..."></textarea>
+        </div>
+        <div class="form-group">
+            <label>🎙️ Ses Dosyası Yükle:</label>
             <input type="file" id="sesDosyasi" accept="audio/*">
         </div>
-
-        <button onclick="raporEkle()">Notu ve Sesi Kaydet</button>
+        <button class="submit-btn" onclick="notKaydet()">Notu Kaydet</button>
     </div>
 
-    <!-- Öğrenci ve Geçmiş Notlar Listesi -->
-    <div class="box">
-        <h3>Öğrenci Listesi ve Geçmiş Notlar</h3>
-        {% for o in ogrenciler %}
-            <div class="ogrenci-card">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <strong>{{ o[1] }}</strong> ({{ o[2] }})
-                    <button class="btn-danger btn-sm" onclick="ogrenciSil({{ o[0] }})">Öğrenciyi Sil</button>
-                </div>
-                <button class="btn-sm btn-warning" onclick="raporlariYukle({{ o[0] }})">Geçmiş Notları Gör / Düzenle</button>
-                <div id="raporlar-{{ o[0] }}" style="display:none; margin-top:10px;"></div>
+    <!-- 3. BLOK: TYT / AYT NET TAKİBİ -->
+    <div id="net-block" class="tab-content">
+        <h3>Aylık TYT / AYT Net Kaydı</h3>
+        <div class="form-group">
+            <label>Öğrenci Seçin:</label>
+            <select id="netOgrenciSelect"><option value="">Yükleniyor...</option></select>
+        </div>
+        <div class="form-group">
+            <label>Ay Seçin:</label>
+            <select id="netAySelect">
+                <option value="Eylül">Eylül</option>
+                <option value="Ekim">Ekim</option>
+                <option value="Kasım">Kasım</option>
+                <option value="Aralık">Aralık</option>
+                <option value="Ocak">Ocak</option>
+                <option value="Şubat">Şubat</option>
+                <option value="Mart">Mart</option>
+                <option value="Nisan">Nisan</option>
+                <option value="Mayıs">Mayıs</option>
+                <option value="Haziran">Haziran</option>
+            </select>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <div class="form-group" style="flex:1;">
+                <label>TYT Net:</label>
+                <input type="number" step="0.25" id="tytNet" placeholder="Örn: 65.5">
             </div>
-        {% endfor %}
+            <div class="form-group" style="flex:1;">
+                <label>AYT Net:</label>
+                <input type="number" step="0.25" id="aytNet" placeholder="Örn: 42.0">
+            </div>
+        </div>
+        <button class="submit-btn" onclick="netKaydet()">Netleri Kaydet</button>
+
+        <h3 style="margin-top: 30px;">Tüm Aylık Net Tablosu</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Öğrenci</th>
+                    <th>Ay</th>
+                    <th>TYT Net</th>
+                    <th>AYT Net</th>
+                </tr>
+            </thead>
+            <tbody id="netlerTableBody"></tbody>
+        </table>
     </div>
 
-    <script>
-        async function ogrenciEkle() {
-            let ad = document.getElementById('ad').value;
-            let sinif = document.getElementById('sinif').value;
-            if(!ad) return alert('Lütfen isim girin');
+    <!-- 4. BLOK: GEÇMİŞ NOTLAR VE SESLER -->
+    <div id="gecmis-notlar-block" class="tab-content">
+        <h3>Öğrenciler Hakkında Yazılan Geçmiş Notlar</h3>
+        <div class="form-group">
+            <label>Filtrele (Öğrenci Seçin):</label>
+            <select id="filtreOgrenciSelect" onchange="gecmisNotlariYukle()">
+                <option value="">Tüm Öğrenciler</option>
+            </select>
+        </div>
+        <div id="gecmisNotlarListesi"></div>
+    </div>
+</div>
 
-            await fetch('/ogrenci-ekle', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ad_soyad: ad, sinif: sinif})
+<script>
+    // BLOK SEÇİMİ
+    function openTab(tabId, btn) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        btn.classList.add('active');
+        
+        if(tabId === 'gecmis-notlar-block') gecmisNotlariYukle();
+        if(tabId === 'net-block') netleriYukle();
+    }
+
+    // SAYFA YÜKLENİNCE
+    window.onload = function() {
+        ogrencileriYukle();
+    };
+
+    function ogrencileriYukle() {
+        fetch('/api/ogrenciler')
+        .then(r => r.json())
+        .then(data => {
+            let html = '<ul>';
+            let selectOptions = '<option value="">-- Öğrenci Seçin --</option>';
+            data.forEach(o => {
+                html += `<li><strong>${o.ad_soyad}</strong> - ${o.sinif}</li>`;
+                selectOptions += `<option value="${o.id}">${o.ad_soyad} (${o.sinif})</option>`;
             });
-            location.reload();
-        }
+            html += '</ul>';
+            
+            document.getElementById('ogrenciListesi').innerHTML = html;
+            document.getElementById('notOgrenciSelect').innerHTML = selectOptions;
+            document.getElementById('netOgrenciSelect').innerHTML = selectOptions;
+            document.getElementById('filtreOgrenciSelect').innerHTML = '<option value="">Tüm Öğrenciler</option>' + selectOptions.replace('<option value="">-- Öğrenci Seçin --</option>', '');
+        });
+    }
 
-        async function ogrenciSil(id) {
-            if(!confirm("Bu öğrenciyi ve tüm notlarını silmek istediğinize emin misiniz?")) return;
-            await fetch('/ogrenci-sil/' + id, { method: 'DELETE' });
-            location.reload();
-        }
+    function ogrenciEkle() {
+        let ad_soyad = document.getElementById('adSoyad').value;
+        let sinif = document.getElementById('sinif').value;
+        if(!ad_soyad) return alert('Lütfen isim yazın!');
 
-        async function raporEkle() {
-            let ogrenci_id = document.getElementById('seciliOgrenci').value;
-            let notlar = document.getElementById('notlar').value;
-            let sesInput = document.getElementById('sesDosyasi');
+        fetch('/api/ogrenci_ekle', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ad_soyad, sinif})
+        }).then(() => {
+            document.getElementById('adSoyad').value = '';
+            document.getElementById('sinif').value = '';
+            ogrencileriYukle();
+            alert('Öğrenci eklendi!');
+        });
+    }
 
-            if(!ogrenci_id) return alert('Lütfen öğrenci seçin');
+    function notKaydet() {
+        let ogrenci_id = document.getElementById('notOgrenciSelect').value;
+        let notlar = document.getElementById('dersNotu').value;
+        let sesFile = document.getElementById('sesDosyasi').files[0];
 
-            let formData = new FormData();
-            formData.append('ogrenci_id', ogrenci_id);
-            formData.append('notlar', notlar);
+        if(!ogrenci_id) return alert('Lütfen öğrenci seçin!');
 
-            if (sesInput.files.length > 0) {
-                formData.append('ses', sesInput.files[0]);
-            }
+        let formData = new FormData();
+        formData.append('ogrenci_id', ogrenci_id);
+        formData.append('notlar', notlar);
+        if(sesFile) formData.append('ses', sesFile);
 
-            await fetch('/rapor-ekle', {
-                method: 'POST',
-                body: formData
-            });
+        fetch('/api/not_ekle', {
+            method: 'POST',
+            body: formData
+        }).then(() => {
+            document.getElementById('dersNotu').value = '';
+            document.getElementById('sesDosyasi').value = '';
+            alert('Not ve ses kaydı başarıyla kaydedildi!');
+        });
+    }
 
-            alert('Not ve Ses Kaydı Başarıyla Eklendi!');
-            document.getElementById('notlar').value = '';
-            sesInput.value = '';
-            raporlariYukle(ogrenci_id);
-        }
+    function netKaydet() {
+        let ogrenci_id = document.getElementById('netOgrenciSelect').value;
+        let ay = document.getElementById('netAySelect').value;
+        let tyt_net = document.getElementById('tytNet').value;
+        let ayt_net = document.getElementById('aytNet').value;
 
-        async function raporlariYukle(ogrenci_id) {
-            let div = document.getElementById('raporlar-' + ogrenci_id);
-            if(div.style.display === 'block') {
-                div.style.display = 'none';
-                return;
-            }
+        if(!ogrenci_id) return alert('Lütfen öğrenci seçin!');
 
-            let res = await fetch('/raporlar/' + ogrenci_id);
-            let veriler = await res.json();
+        fetch('/api/net_ekle', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ogrenci_id, ay, tyt_net, ayt_net})
+        }).then(() => {
+            document.getElementById('tytNet').value = '';
+            document.getElementById('aytNet').value = '';
+            netleriYukle();
+            alert('Netler kaydedildi!');
+        });
+    }
+
+    function netleriYukle() {
+        fetch('/api/netler')
+        .then(r => r.json())
+        .then(data => {
             let html = '';
-
-            if(veriler.length === 0) {
-                html = '<small>Henüz eklenmiş not yok.</small>';
-            } else {
-                veriler.forEach(r => {
-                    html += `
-                        <div class="rapor-card">
-                            <small style="color:#666;">📅 ${r.tarih}</small>
-                            <textarea id="not-text-${r.id}" rows="2">${r.notlar || ''}</textarea>
-                            ${r.ses_dosyasi ? `<audio controls src="/uploads/${r.ses_dosyasi}" style="width:100%; margin-top:5px;"></audio>` : ''}
-                            <div class="flex-btns">
-                                <button class="btn-sm btn-warning" onclick="raporGuncelle(${r.id})">Güncelle</button>
-                                <button class="btn-sm btn-danger" onclick="raporSil(${r.id}, ${ogrenci_id})">Sil</button>
-                            </div>
-                        </div>
-                    `;
-                });
-            }
-            div.innerHTML = html;
-            div.style.display = 'block';
-        }
-
-        async function raporGuncelle(id) {
-            let yeniNot = document.getElementById('not-text-' + id).value;
-            await fetch('/rapor-guncelle/' + id, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({notlar: yeniNot})
+            data.forEach(n => {
+                html += `<tr>
+                    <td>${n.ad_soyad}</td>
+                    <td>${n.ay}</td>
+                    <td><strong>${n.tyt_net}</strong></td>
+                    <td><strong>${n.ayt_net}</strong></td>
+                </tr>`;
             });
-            alert('Not güncellendi!');
-        }
+            document.getElementById('netlerTableBody').innerHTML = html;
+        });
+    }
 
-        async function raporSil(rapor_id, ogrenci_id) {
-            if(!confirm("Bu notu silmek istediğinize emin misiniz?")) return;
-            await fetch('/rapor-sil/' + rapor_id, { method: 'DELETE' });
-            raporlariYukle(ogrenci_id);
-        }
-    </script>
+    function gecmisNotlariYukle() {
+        let ogrenci_id = document.getElementById('filtreOgrenciSelect').value;
+        fetch('/api/gecmis_notlar?ogrenci_id=' + ogrenci_id)
+        .then(r => r.json())
+        .then(data => {
+            let html = '';
+            if(data.length === 0) html = '<p>Henüz kayıtlı bir not bulunamadı.</p>';
+            data.forEach(item => {
+                html += `<div class="card">
+                    <div class="card-header">👤 ${item.ad_soyad} (${item.sinif})</div>
+                    <div class="card-date">📅 ${item.tarih}</div>
+                    <div>${item.notlar || '<i>Not metni girilmemiş.</i>'}</div>`;
+                if(item.ses_dosyasi) {
+                    html += `<audio controls src="/uploads/${item.ses_dosyasi}"></audio>`;
+                }
+                html += `</div>`;
+            });
+            document.getElementById('gecmisNotlarListesi').innerHTML = html;
+        });
+    }
+</script>
 </body>
 </html>
 """
 
-# ---------------------------------------------------------
-# 3. SUNUCU YÖNLENDİRMELERİ (ROUTES)
-# ---------------------------------------------------------
+# ----------------------------------------------------
+# 3. SUNUCU ROTALARI VE API (BACKEND)
+# ----------------------------------------------------
 @app.route('/')
-def home():
-    conn = sqlite3.connect('ogretmen.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM ogrenciler")
-    ogrenciler = cursor.fetchall()
-    conn.close()
-    return render_template_string(HTML_LAYOUT, ogrenciler=ogrenciler)
-
-@app.route('/ogrenci-ekle', methods=['POST'])
-def ogrenci_ekle():
-    data = request.json
-    conn = sqlite3.connect('ogretmen.db')
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO ogrenciler (ad_soyad, sinif) VALUES (?, ?)", (data['ad_soyad'], data['sinif']))
-    conn.commit()
-    conn.close()
-    return jsonify({"durum": "ok"})
-
-@app.route('/ogrenci-sil/<int:id>', methods=['DELETE'])
-def ogrenci_sil(id):
-    conn = sqlite3.connect('ogretmen.db')
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM ogrenciler WHERE id = ?", (id,))
-    cursor.execute("DELETE FROM raporlar WHERE ogrenci_id = ?", (id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"durum": "ok"})
-
-@app.route('/rapor-ekle', methods=['POST'])
-def rapor_ekle():
-    ogrenci_id = request.form.get('ogrenci_id')
-    notlar = request.form.get('notlar')
-    tarih = datetime.now().strftime("%d.%m.%Y %H:%M")
-    ses_dosya_adi = None
-
-    if 'ses' in request.files:
-        ses_file = request.files['ses']
-        if ses_file.filename != '':
-            uzanti = ses_file.filename.split('.')[-1]
-            dosya_adi = f"ogrenci_{ogrenci_id}_{int(datetime.now().timestamp())}.{uzanti}"
-            ses_file.save(os.path.join(app.config['UPLOAD_FOLDER'], dosya_adi))
-            ses_dosya_adi = dosya_adi
-
-    conn = sqlite3.connect('ogretmen.db')
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO raporlar (ogrenci_id, tarih, notlar, ses_dosyasi) VALUES (?, ?, ?, ?)", 
-                   (ogrenci_id, tarih, notlar, ses_dosya_adi))
-    conn.commit()
-    conn.close()
-    return jsonify({"durum": "ok"})
-
-@app.route('/raporlar/<int:ogrenci_id>')
-def raporlari_getir(ogrenci_id):
-    conn = sqlite3.connect('ogretmen.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, tarih, notlar, ses_dosyasi FROM raporlar WHERE ogrenci_id = ? ORDER BY id DESC", (ogrenci_id,))
-    raporlar = cursor.fetchall()
-    conn.close()
-    
-    veri = []
-    for r in raporlar:
-        veri.append({
-            "id": r[0],
-            "tarih": r[1],
-            "notlar": r[2],
-            "ses_dosyasi": r[3]
-        })
-    return jsonify(veri)
-
-@app.route('/rapor-guncelle/<int:id>', methods=['PUT'])
-def rapor_guncelle(id):
-    data = request.json
-    conn = sqlite3.connect('ogretmen.db')
-    cursor = conn.cursor()
-    cursor.execute("UPDATE raporlar SET notlar = ? WHERE id = ?", (data['notlar'], id))
-    conn.commit()
-    conn.close()
-    return jsonify({"durum": "ok"})
-
-@app.route('/rapor-sil/<int:id>', methods=['DELETE'])
-def rapor_sil(id):
-    conn = sqlite3.connect('ogretmen.db')
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM raporlar WHERE id = ?", (id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"durum": "ok"})
+def index():
+    return render_template_string(HTML_LAYOUT)
 
 @app.route('/uploads/<filename>')
-def upload_file(filename):
+def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-# ---------------------------------------------------------
-# 4. ÇALIŞTIRMA
-# ---------------------------------------------------------
+@app.route('/api/ogrenciler', methods=['GET'])
+def get_ogrenciler():
+    conn = sqlite3.connect('ogretmen.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, ad_soyad, sinif FROM ogrenciler ORDER BY ad_soyad ASC')
+    rows = cursor.fetchall()
+    conn.close()
+    return jsonify([{"id": r[0], "ad_soyad": r[1], "sinif": r[2]} for r in rows])
+
+@app.route('/api/ogrenci_ekle', methods=['POST'])
+def add_ogrenci():
+    data = request.json
+    conn = sqlite3.connect('ogretmen.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO ogrenciler (ad_soyad, sinif) VALUES (?, ?)', (data['ad_soyad'], data['sinif']))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok"})
+
+@app.route('/api/not_ekle', methods=['POST'])
+def add_not():
+    ogrenci_id = request.form.get('ogrenci_id')
+    notlar = request.form.get('notlar')
+    ses_file = request.files.get('ses')
+    
+    filename = None
+    if ses_file:
+        filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{ses_file.filename}"
+        ses_file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        
+    tarih = datetime.now().strftime('%Y-%m-%d %H:%M')
+    
+    conn = sqlite3.connect('ogretmen.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO raporlar (ogrenci_id, tarih, notlar, ses_dosyasi) VALUES (?, ?, ?, ?)',
+                   (ogrenci_id, tarih, notlar, filename))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok"})
+
+@app.route('/api/net_ekle', methods=['POST'])
+def add_net():
+    data = request.json
+    conn = sqlite3.connect('ogretmen.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO netler (ogrenci_id, ay, tyt_net, ayt_net) VALUES (?, ?, ?, ?)',
+                   (data['ogrenci_id'], data['ay'], data['tyt_net'], data['ayt_net']))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok"})
+
+@app.route('/api/netler', methods=['GET'])
+def get_netler():
+    conn = sqlite3.connect('ogretmen.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT o.ad_soyad, n.ay, n.tyt_net, n.ayt_net 
+        FROM netler n 
+        JOIN ogrenciler o ON n.ogrenci_id = o.id 
+        ORDER BY n.id DESC
+    ''')
+    rows = cursor.fetchall()
+    conn.close()
+    return jsonify([{"ad_soyad": r[0], "ay": r[1], "tyt_net": r[2], "ayt_net": r[3]} for r in rows])
+
+@app.route('/api/gecmis_notlar', methods=['GET'])
+def get_gecmis_notlar():
+    ogrenci_id = request.args.get('ogrenci_id')
+    conn = sqlite3.connect('ogretmen.db')
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT o.ad_soyad, o.sinif, r.tarih, r.notlar, r.ses_dosyasi 
+        FROM raporlar r 
+        JOIN ogrenciler o ON r.ogrenci_id = o.id 
+    '''
+    params = []
+    if ogrenci_id:
+        query += ' WHERE r.ogrenci_id = ? '
+        params.append(ogrenci_id)
+        
+    query += ' ORDER BY r.id DESC'
+    
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+    return jsonify([{"ad_soyad": r[0], "sinif": r[1], "tarih": r[2], "notlar": r[3], "ses_dosyasi": r[4]} for r in rows])
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(debug=True)
