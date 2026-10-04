@@ -15,7 +15,6 @@ def init_db():
     conn = sqlite3.connect('ogretmen.db')
     cursor = conn.cursor()
     
-    # Öğrenciler Tablosu
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ogrenciler (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,7 +23,6 @@ def init_db():
         )
     ''')
     
-    # Notlar & Ses Kayıtları Tablosu
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS raporlar (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +34,6 @@ def init_db():
         )
     ''')
     
-    # TYT / AYT Net Takip Tablosu
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS netler (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,7 +45,6 @@ def init_db():
         )
     ''')
     
-    # Eğlence / Müzik Tablosu
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS muzikler (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +60,7 @@ def init_db():
 init_db()
 
 # ----------------------------------------------------
-# 2. ARAYÜZ (HTML / CSS / JAVASCRIPT - BLOKLU & SİLME ÖZELLİKLİ)
+# 2. ARAYÜZ (HTML / CSS / JAVASCRIPT)
 # ----------------------------------------------------
 HTML_LAYOUT = """
 <!DOCTYPE html>
@@ -125,7 +121,7 @@ HTML_LAYOUT = """
         <button class="tab-btn" onclick="openTab('eglence-block', this)">🎵 Eğlence & Müzik</button>
     </div>
 
-    <!-- 1. BLOK: ÖĞRENCİ EKLE & LİSTELE (SİLME ÖZELLİKLİ) -->
+    <!-- 1. BLOK: ÖĞRENCİ EKLE & LİSTELE -->
     <div id="ogrenci-block" class="tab-content active">
         <h3>Yeni Öğrenci Ekle</h3>
         <div class="form-group"><input type="text" id="adSoyad" placeholder="Öğrenci Adı Soyadı"></div>
@@ -148,7 +144,7 @@ HTML_LAYOUT = """
             <textarea id="dersNotu" rows="4" placeholder="Öğrencinin durumuyla ilgili notlar..."></textarea>
         </div>
         <div class="form-group">
-            <label>🎙️️ Ses Dosyası Yükle:</label>
+            <label>🎙 Ses Dosyası Yükle:</label>
             <input type="file" id="sesDosyasi" accept="audio/*">
         </div>
         <button class="submit-btn" onclick="notKaydet()">Notu Kaydet</button>
@@ -202,7 +198,7 @@ HTML_LAYOUT = """
         </table>
     </div>
 
-    <!-- 4. BLOK: GEÇMİŞ NOTLAR VE SESLER (SİLME ÖZELLİKLİ) -->
+    <!-- 4. BLOK: GEÇMİŞ NOTLAR VE SESLER -->
     <div id="gecmis-notlar-block" class="tab-content">
         <h3>Öğrenciler Hakkında Yazılan Geçmiş Notlar</h3>
         <div class="form-group">
@@ -234,7 +230,6 @@ HTML_LAYOUT = """
 </div>
 
 <script>
-    // BLOK SEÇİMİ
     function openTab(tabId, btn) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -246,9 +241,9 @@ HTML_LAYOUT = """
         if(tabId === 'eglence-block') muzikleriYukle();
     }
 
-    // SAYFA YÜKLENİNCE
     window.onload = function() {
         ogrencileriYukle();
+        gecmisNotlariYukle();
     };
 
     function ogrencileriYukle() {
@@ -291,10 +286,11 @@ HTML_LAYOUT = """
     }
 
     function ogrenciSil(id) {
-        if(!confirm('Bu öğrenciyi ve öğrenciye ait tüm notları/netleri silmek istediğinizden emin misiniz?')) return;
+        if(!confirm('Bu öğrenciyi ve öğrenciye ait tüm kayıtları silmek istediğinizden emin misiniz?')) return;
         fetch('/api/ogrenci_sil/' + id, { method: 'DELETE' })
         .then(() => {
             ogrencileriYukle();
+            gecmisNotlariYukle();
             alert('Öğrenci silindi!');
         });
     }
@@ -318,6 +314,7 @@ HTML_LAYOUT = """
             document.getElementById('dersNotu').value = '';
             document.getElementById('sesDosyasi').value = '';
             alert('Not ve ses kaydı başarıyla kaydedildi!');
+            gecmisNotlariYukle();
         });
     }
 
@@ -369,27 +366,33 @@ HTML_LAYOUT = """
 
     function gecmisNotlariYukle() {
         let ogrenci_id = document.getElementById('filtreOgrenciSelect').value;
-        fetch('/api/gecmis_notlar?ogrenci_id=' + ogrenci_id)
+        let url = '/api/gecmis_notlar';
+        if(ogrenci_id) url += '?ogrenci_id=' + ogrenci_id;
+
+        fetch(url)
         .then(r => r.json())
         .then(data => {
             let html = '';
-            if(data.length === 0) html = '<p>Henüz kayıtlı bir not bulunamadı.</p>';
-            data.forEach(item => {
-                html += `<div class="card">
-                    <button class="delete-btn" onclick="notSil(${item.id})">Bu Notu Sil</button>
-                    <div class="card-header">👤 ${item.ad_soyad} (${item.sinif})</div>
-                    <div class="card-date">📅 ${item.tarih}</div>
-                    <div>${item.notlar || '<i>Not metni girilmemiş.</i>'}</div>`;
-                if(item.ses_dosyasi) {
-                    html += `<audio controls src="/uploads/${item.ses_dosyasi}"></audio>`;
-                }
-                html += `</div>`;
-            });
+            if(!data || data.length === 0) {
+                html = '<p style="padding:10px; color:#666;">Henüz kaydedilmiş bir not bulunamadı.</p>';
+            } else {
+                data.forEach(item => {
+                    html += `<div class="card">
+                        <button class="delete-btn" onclick="notSil(${item.id})">Bu Notu Sil</button>
+                        <div class="card-header">👤 ${item.ad_soyad} (${item.sinif})</div>
+                        <div class="card-date">📅 ${item.tarih}</div>
+                        <div style="margin-top:8px;">${item.notlar ? item.notlar : '<i>Not metni girilmemiş.</i>'}</div>`;
+                    if(item.ses_dosyasi) {
+                        html += `<audio controls src="/uploads/${item.ses_dosyasi}"></audio>`;
+                    }
+                    html += `</div>`;
+                });
+            }
             document.getElementById('gecmisNotlarListesi').innerHTML = html;
-        });
+        })
+        .catch(err => console.error("Hata:", err));
     }
 
-    // EĞLENCE & MÜZİK FONKSİYONLARI
     function muzikYukle() {
         let baslik = document.getElementById('muzikBaslik').value;
         let muzikFile = document.getElementById('muzikDosyasi').files[0];
@@ -416,15 +419,17 @@ HTML_LAYOUT = """
         .then(r => r.json())
         .then(data => {
             let html = '';
-            if(data.length === 0) html = '<p>Henüz yüklenmiş müzik bulunmuyor.</p>';
-            data.forEach(m => {
-                html += `<div class="card">
-                    <button class="delete-btn" onclick="muzikSil(${m.id})">Sil</button>
-                    <div class="card-header">🎵 ${m.baslik}</div>
-                    <div class="card-date">📅 Yükleme Tarihi: ${m.tarih}</div>
-                    <audio controls src="/uploads/${m.dosya_adi}"></audio>
-                </div>`;
-            });
+            if(!data || data.length === 0) html = '<p>Henüz yüklenmiş müzik bulunmuyor.</p>';
+            else {
+                data.forEach(m => {
+                    html += `<div class="card">
+                        <button class="delete-btn" onclick="muzikSil(${m.id})">Sil</button>
+                        <div class="card-header">🎵 ${m.baslik}</div>
+                        <div class="card-date">📅 Yükleme Tarihi: ${m.tarih}</div>
+                        <audio controls src="/uploads/${m.dosya_adi}"></audio>
+                    </div>`;
+                });
+            }
             document.getElementById('muzikListesi').innerHTML = html;
         });
     }
@@ -490,8 +495,4 @@ def add_not():
     ses_file = request.files.get('ses')
     
     filename = None
-    if ses_file:
-        filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{ses_file.filename}"
-        ses_file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        
-    tarih = datetime.now().strfti
+    if ses_file and ses_file.filen
