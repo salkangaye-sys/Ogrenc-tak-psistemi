@@ -60,7 +60,7 @@ init_db()
 def index():
     return render_template_string(HTML_LAYOUT)
 
-@app.route('/uploads/<filename>')
+@app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
@@ -72,9 +72,9 @@ def api_ogrenciler():
     conn = sqlite3.connect('ogretmen.db')
     cursor = conn.cursor()
     if request.method == 'POST':
-        data = request.json
+        data = request.json or {}
         cursor.execute("INSERT INTO ogrenciler (ad_soyad, sinif) VALUES (?, ?)", 
-                       (data['ad_soyad'], data['sinif']))
+                       (data.get('ad_soyad', ''), data.get('sinif', '')))
         conn.commit()
         conn.close()
         return jsonify({"status": "ok"})
@@ -93,7 +93,7 @@ def api_rapor_ekle():
     ses_dosyasi_adi = None
     if 'ses_dosyasi' in request.files:
         file = request.files['ses_dosyasi']
-        if file.filename != '':
+        if file and file.filename != '':
             ses_dosyasi_adi = f"{datetime.now().timestamp()}_{file.filename}"
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], ses_dosyasi_adi))
 
@@ -137,11 +137,11 @@ def api_not_sil(id):
 
 @app.route('/api/sinav_ekle', methods=['POST'])
 def api_sinav_ekle():
-    data = request.json
+    data = request.json or {}
     conn = sqlite3.connect('ogretmen.db')
     cursor = conn.cursor()
     cursor.execute("INSERT INTO sinavlar (ogrenci_id, sinav_turu, ay, net) VALUES (?, ?, ?, ?)",
-                   (data['ogrenci_id'], data['sinav_turu'], data['ay'], data['net']))
+                   (data.get('ogrenci_id'), data.get('sinav_turu'), data.get('ay'), data.get('net')))
     conn.commit()
     conn.close()
     return jsonify({"status": "ok"})
@@ -193,21 +193,6 @@ def api_siralama():
     conn.close()
     return jsonify([{"ad_soyad": r[0], "sinif": r[1], "ortalama": round(r[2], 2), "sinav_sayisi": r[3]} for r in rows])
 
-@app.route('/api/muzik_ekle', methods=['POST'])
-def api_muzik_ekle():
-    baslik = request.form.get('baslik')
-    file = request.files.get('muzik')
-    if file:
-        dosya_adi = f"muzik_{datetime.now().timestamp()}_{file.filename}"
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], dosya_adi))
-        conn = sqlite3.connect('ogretmen.db')
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO muziker (baslik, dosya_yolu) VALUES (?, ?)", (baslik, dosya_adi))
-        conn.commit()
-        conn.close()
-        return jsonify({"status": "ok"})
-    return jsonify({"status": "error"}), 400
-
 # --------------------------------------------------
 # 4. ARAYÜZ (HTML / CSS / JS)
 # --------------------------------------------------
@@ -223,7 +208,6 @@ HTML_LAYOUT = """
         .container { max-width: 900px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         h1 { color: #2c3e50; text-align: center; margin-bottom: 25px; }
         
-        /* Akordeon Blok Stilleri */
         .block-header {
             background-color: #34495e;
             color: white;
@@ -246,7 +230,7 @@ HTML_LAYOUT = """
             padding: 20px;
             border-bottom-left-radius: 8px;
             border-bottom-right-radius: 8px;
-            display: none; /* Başlangıçta kapalı */
+            display: none;
         }
 
         input, select, textarea { width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
@@ -354,17 +338,6 @@ HTML_LAYOUT = """
             </select>
             <div id="gecmisNotlarListesi"></div>
         </div>
-
-        <!-- BLOK 5: Müzik / Ses Dosyası Yükle -->
-        <div class="block-header" onclick="toggleBlock('block5')">
-            <span>🎵 5. Müzik & Ses Dosyası Deposu</span>
-            <span id="icon-block5">➕</span>
-        </div>
-        <div id="block5" class="block-content">
-            <input type="text" id="muzikBaslik" placeholder="Müzik / Dosya Başlığı">
-            <input type="file" id="muzikDosyasi" accept="audio/*">
-            <button onclick="muzikYukle()">Yükle</button>
-        </div>
     </div>
 
     <script>
@@ -375,7 +348,6 @@ HTML_LAYOUT = """
             siralamaGetir();
         });
 
-        // Blok Açma - Kapatma Fonksiyonu
         function toggleBlock(id) {
             const el = document.getElementById(id);
             const icon = document.getElementById('icon-' + id);
@@ -395,6 +367,7 @@ HTML_LAYOUT = """
                     const list = ['ogrenciSec', 'filtreOgrenci', 'sinavOgrenciSec', 'filtreSinavOgrenci'];
                     list.forEach(id => {
                         const el = document.getElementById(id);
+                        if (!el) return;
                         el.innerHTML = '<option value="">Öğrenci Seçin...</option>';
                         data.forEach(o => {
                             el.innerHTML += `<option value="${o.id}">${o.ad_soyad} (${o.sinif})</option>`;
@@ -487,4 +460,32 @@ HTML_LAYOUT = """
                     });
                     document.getElementById('siralamaTablosu').innerHTML = html || '<tr><td colspan="5">Henüz bu sınav türüne ait veri girilmedi.</td></tr>';
                 });
-           }
+        }
+
+        function raporEkle() {
+            const ogrenciId = document.getElementById('ogrenciSec').value;
+            const notlar = document.getElementById('notMetni').value;
+            const ses = document.getElementById('sesDosyasi').files[0];
+
+            if (!ogrenciId) return alert('Lütfen öğrenci seçin!');
+
+            const formData = new FormData();
+            formData.append('ogrenci_id', ogrenciId);
+            formData.append('notlar', notlar);
+            if (ses) formData.append('ses_dosyasi', ses);
+
+            fetch('/api/rapor_ekle', { method: 'POST', body: formData }).then(() => {
+                document.getElementById('notMetni').value = '';
+                document.getElementById('sesDosyasi').value = '';
+                notlariGetir();
+                alert('Not eklendi!');
+            });
+        }
+
+        function notlariGetir() {
+            const ogrenciId = document.getElementById('filtreOgrenci').value;
+            let url = '/api/raporlar';
+            if (ogrenciId) url += '?ogrenci_id=' + ogrenciId;
+
+            fetch(url).then(r => r.json()).then(data => {
+                let html =
