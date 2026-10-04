@@ -32,13 +32,6 @@ def init_db():
         )
     ''')
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS muziker (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            baslik TEXT NOT NULL,
-            dosya_yolu TEXT NOT NULL
-        )
-    ''')
-    cursor.execute('''
         CREATE TABLE IF NOT EXISTS sinavlar (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ogrenci_id INTEGER,
@@ -273,15 +266,15 @@ HTML_LAYOUT = """
                 <option value="AYT">AYT</option>
             </select>
             <select id="sinavAy">
-                <option value="Eylül">Eylül</option>
+                <option value="Eylul">Eylül</option>
                 <option value="Ekim">Ekim</option>
-                <option value="Kasım">Kasım</option>
-                <option value="Aralık">Aralık</option>
+                <option value="Kasim">Kasım</option>
+                <option value="Aralik">Aralık</option>
                 <option value="Ocak">Ocak</option>
-                <option value="Şubat">Şubat</option>
+                <option value="Subat">Şubat</option>
                 <option value="Mart">Mart</option>
                 <option value="Nisan">Nisan</option>
-                <option value="Mayıs">Mayıs</option>
+                <option value="Mayis">Mayıs</option>
                 <option value="Haziran">Haziran</option>
             </select>
             <input type="number" step="0.25" id="sinavNet" placeholder="Toplam Net (Örn: 78.5)">
@@ -488,4 +481,7 @@ HTML_LAYOUT = """
             if (ogrenciId) url += '?ogrenci_id=' + ogrenciId;
 
             fetch(url).then(r => r.json()).then(data => {
-                let html =
+                let html = '';
+                data.forEach(item => {
+                    html += `<div class="card">
+                        <button class="delete-btn" onclick="notSil(${item.id})">Sil</button>
