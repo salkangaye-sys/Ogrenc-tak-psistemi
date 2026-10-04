@@ -1,23 +1,59 @@
 import os
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template, send_from_directory, render_template_string
+from flask import Flask, request, jsonify, render_template, send_from_directory
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-DB_NAME = 'ogretmen.db'
+# Render'daki kalıcı bulut veritabanı bağlantısı
+DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///ogretmen.db')
 
 def get_db():
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if DATABASE_URL.startswith("postgres"):
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+        return conn
+    else:
+        import sqlite3
+        conn = sqlite3.connect('ogretmen.db')
+        conn.row_factory = sqlite3.Row
+        return conn
 
 def init_db():
-    with get_db() as conn:
-        cursor = conn.cursor()
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # SQLite / PostgreSQL uyumlu tablo oluşturma
+    if DATABASE_URL.startswith("postgres"):
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ogrenciler (
+                id SERIAL PRIMARY KEY,
+                ad_soyad TEXT NOT NULL,
+                sinif TEXT
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sinavlar (
+                id SERIAL PRIMARY KEY,
+                ogrenci_id INTEGER REFERENCES ogrenciler(id) ON DELETE CASCADE,
+                sinav_turu TEXT NOT NULL,
+                ay TEXT NOT NULL,
+                net REAL NOT NULL
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS raporlar (
+                id SERIAL PRIMARY KEY,
+                ogrenci_id INTEGER REFERENCES ogrenciler(id) ON DELETE CASCADE,
+                notlar TEXT,
+                ses_dosyasi TEXT,
+                tarih TEXT
+            )
+        ''')
+    else:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS ogrenciler (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,198 +62,185 @@ def init_db():
             )
         ''')
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS raporlar (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ogrenci_id INTEGER,
-                tarih TEXT,
-                notlar TEXT,
-                ses_dosyasi TEXT,
-                FOREIGN KEY(ogrenci_id) REFERENCES ogrenciler(id)
-            )
-        ''')
-        cursor.execute('''
             CREATE TABLE IF NOT EXISTS sinavlar (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ogrenci_id INTEGER,
-                sinav_turu TEXT,
-                ay TEXT,
-                net REAL,
-                FOREIGN KEY(ogrenci_id) REFERENCES ogrenciler(id)
+                sinav_turu TEXT NOT NULL,
+                ay TEXT NOT NULL,
+                net REAL NOT NULL
             )
         ''')
-        conn.commit()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS raporlar (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ogrenci_id INTEGER,
+                notlar TEXT,
+                ses_dosyasi TEXT,
+                tarih TEXT
+            )
+        ''')
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 init_db()
 
 @app.route('/')
 def index():
-    # templates/index.html yoksa sunucunun çökmesini engeller
-    if os.path.exists(os.path.join(app.template_folder, 'index.html')):
-        return render_template('index.html')
-    return render_template_string("<h2>Sistem Çalışıyor!</h2><p>Lütfen GitHub reponuza <b>templates/index.html</b> dosyasını ekleyin.</p>")
+    return render_template('index.html')
 
-@app.route('/uploads/<path:filename>')
+@app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/api/ogrenciler', methods=['GET', 'POST'])
-def api_ogrenciler():
-    try:
-        with get_db() as conn:
-            cursor = conn.cursor()
-            if request.method == 'POST':
-                data = request.json or {}
-                ad_soyad = data.get('ad_soyad', '').strip()
-                sinif = data.get('sinif', '').strip()
-                
-                if not ad_soyad:
-                    return jsonify({"error": "Ad soyad boş olamaz"}), 400
-                    
-                cursor.execute("INSERT INTO ogrenciler (ad_soyad, sinif) VALUES (?, ?)", (ad_soyad, sinif))
-                conn.commit()
-                return jsonify({"status": "ok"})
-            else:
-                cursor.execute("SELECT * FROM ogrenciler")
-                rows = cursor.fetchall()
-                return jsonify([{"id": r['id'], "ad_soyad": r['ad_soyad'], "sinif": r['sinif']} for r in rows])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/rapor_ekle', methods=['POST'])
-def api_rapor_ekle():
-    try:
-        ogrenci_id = request.form.get('ogrenci_id')
-        notlar = request.form.get('notlar', '')
-        tarih = datetime.now().strftime("%Y-%m-%d %H:%M")
-        
-        if not ogrenci_id:
-            return jsonify({"error": "Öğrenci seçilmedi"}), 400
-
-        ses_dosyasi_adi = None
-        if 'ses_dosyasi' in request.files:
-            file = request.files['ses_dosyasi']
-            if file and file.filename != '':
-                safe_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                ses_dosyasi_adi = f"{safe_timestamp}_{file.filename}"
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], ses_dosyasi_adi))
-
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO raporlar (ogrenci_id, tarih, notlar, ses_dosyasi) VALUES (?, ?, ?, ?)",
-                           (ogrenci_id, tarih, notlar, ses_dosyasi_adi))
-            conn.commit()
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/raporlar', methods=['GET'])
-def api_raporlar():
-    try:
-        ogrenci_id = request.args.get('ogrenci_id')
-        with get_db() as conn:
-            cursor = conn.cursor()
-            if ogrenci_id:
-                cursor.execute("""
-                    SELECT raporlar.id, ogrenciler.ad_soyad, ogrenciler.sinif, raporlar.tarih, raporlar.notlar, raporlar.ses_dosyasi 
-                    FROM raporlar JOIN ogrenciler ON raporlar.ogrenci_id = ogrenciler.id 
-                    WHERE ogrenci_id = ? ORDER BY raporlar.id DESC
-                """, (ogrenci_id,))
-            else:
-                cursor.execute("""
-                    SELECT raporlar.id, ogrenciler.ad_soyad, ogrenciler.sinif, raporlar.tarih, raporlar.notlar, raporlar.ses_dosyasi 
-                    FROM raporlar JOIN ogrenciler ON raporlar.ogrenci_id = ogrenciler.id 
-                    ORDER BY raporlar.id DESC
-                """)
-            rows = cursor.fetchall()
-            return jsonify([{"id": r[0], "ad_soyad": r[1], "sinif": r[2], "tarih": r[3], "notlar": r[4], "ses_dosyasi": r[5]} for r in rows])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/not_sil/<int:id>', methods=['DELETE'])
-def api_not_sil(id):
-    try:
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM raporlar WHERE id = ?", (id,))
-            conn.commit()
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+def handle_ogrenciler():
+    conn = get_db()
+    cursor = conn.cursor()
+    if request.method == 'POST':
+        data = request.json
+        cursor.execute('INSERT INTO ogrenciler (ad_soyad, sinif) VALUES (%s, %s)' if DATABASE_URL.startswith("postgres") else 'INSERT INTO ogrenciler (ad_soyad, sinif) VALUES (?, ?)',
+                       (data['ad_soyad'], data['sinif']))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'Öğrenci eklendi'}), 201
+    else:
+        cursor.execute('SELECT * FROM ogrenciler ORDER BY ad_soyad')
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
 
 @app.route('/api/sinav_ekle', methods=['POST'])
-def api_sinav_ekle():
-    try:
-        data = request.json or {}
-        ogrenci_id = data.get('ogrenci_id')
-        sinav_turu = data.get('sinav_turu')
-        ay = data.get('ay')
-        net = data.get('net')
-
-        if not all([ogrenci_id, sinav_turu, ay, net is not None]):
-            return jsonify({"error": "Eksik bilgi girdiniz"}), 400
-
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO sinavlar (ogrenci_id, sinav_turu, ay, net) VALUES (?, ?, ?, ?)",
-                           (ogrenci_id, sinav_turu, ay, float(net)))
-            conn.commit()
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+def sinav_ekle():
+    data = request.json
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO sinavlar (ogrenci_id, sinav_turu, ay, net) VALUES (%s, %s, %s, %s)' if DATABASE_URL.startswith("postgres") else 'INSERT INTO sinavlar (ogrenci_id, sinav_turu, ay, net) VALUES (?, ?, ?, ?)',
+                   (data['ogrenci_id'], data['sinav_turu'], data['ay'], data['net']))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Sınav eklendi'})
 
 @app.route('/api/sinavlar', methods=['GET'])
-def api_sinavlar():
-    try:
-        ogrenci_id = request.args.get('ogrenci_id')
-        with get_db() as conn:
-            cursor = conn.cursor()
-            if ogrenci_id:
-                cursor.execute("""
-                    SELECT sinavlar.id, ogrenciler.ad_soyad, sinavlar.sinav_turu, sinavlar.ay, sinavlar.net 
-                    FROM sinavlar JOIN ogrenciler ON sinavlar.ogrenci_id = ogrenciler.id 
-                    WHERE ogrenci_id = ? ORDER BY sinavlar.id DESC
-                """, (ogrenci_id,))
-            else:
-                cursor.execute("""
-                    SELECT sinavlar.id, ogrenciler.ad_soyad, sinavlar.sinav_turu, sinavlar.ay, sinavlar.net 
-                    FROM sinavlar JOIN ogrenciler ON sinavlar.ogrenci_id = ogrenciler.id 
-                    ORDER BY sinavlar.id DESC
-                """)
-            rows = cursor.fetchall()
-            return jsonify([{"id": r[0], "ad_soyad": r[1], "sinav_turu": r[2], "ay": r[3], "net": r[4]} for r in rows])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+def sinavlar():
+    ogrenci_id = request.args.get('ogrenci_id')
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT s.id, o.ad_soyad, s.sinav_turu, s.ay, s.net 
+        FROM sinavlar s 
+        JOIN ogrenciler o ON s.ogrenci_id = o.id
+    '''
+    if ogrenci_id:
+        query += ' WHERE s.ogrenci_id = %s ORDER BY s.id DESC' if DATABASE_URL.startswith("postgres") else ' WHERE s.ogrenci_id = ? ORDER BY s.id DESC'
+        cursor.execute(query, (ogrenci_id,))
+    else:
+        query += ' ORDER BY s.id DESC'
+        cursor.execute(query)
+        
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
 
 @app.route('/api/sinav_sil/<int:id>', methods=['DELETE'])
-def api_sinav_sil(id):
-    try:
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM sinavlar WHERE id = ?", (id,))
-            conn.commit()
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+def sinav_sil(id):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM sinavlar WHERE id = %s' if DATABASE_URL.startswith("postgres") else 'DELETE FROM sinavlar WHERE id = ?', (id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Sınav silindi'})
 
 @app.route('/api/siralama', methods=['GET'])
-def api_siralama():
-    try:
-        sinav_turu = request.args.get('sinav_turu', 'TYT')
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT ogrenciler.ad_soyad, ogrenciler.sinif, AVG(sinavlar.net) as ortalama_net, COUNT(sinavlar.id) as sinav_sayisi
-                FROM sinavlar 
-                JOIN ogrenciler ON sinavlar.ogrenci_id = ogrenciler.id
-                WHERE sinavlar.sinav_turu = ?
-                GROUP BY ogrenciler.id
-                ORDER BY ortalama_net DESC
-            """, (sinav_turu,))
-            rows = cursor.fetchall()
-            return jsonify([{"ad_soyad": r[0], "sinif": r[1], "ortalama": round(r[2], 2) if r[2] else 0, "sinav_sayisi": r[3]} for r in rows])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+def siralama():
+    sinav_turu = request.args.get('sinav_turu', 'TYT')
+    conn = get_db()
+    cursor = conn.cursor()
+    query = '''
+        SELECT o.ad_soyad, o.sinif, 
+               ROUND(AVG(s.net)::numeric, 2) as ortalama, 
+               COUNT(s.id) as sinav_sayisi
+        FROM ogrenciler o
+        JOIN sinavlar s ON o.id = s.ogrenci_id
+        WHERE s.sinav_turu = %s
+        GROUP BY o.id, o.ad_soyad, o.sinif
+        ORDER BY ortalama DESC
+    ''' if DATABASE_URL.startswith("postgres") else '''
+        SELECT o.ad_soyad, o.sinif, 
+               ROUND(AVG(s.net), 2) as ortalama, 
+               COUNT(s.id) as sinav_sayisi
+        FROM ogrenciler o
+        JOIN sinavlar s ON o.id = s.ogrenci_id
+        WHERE s.sinav_turu = ?
+        GROUP BY o.id, o.ad_soyad, o.sinif
+        ORDER BY ortalama DESC
+    '''
+    cursor.execute(query, (sinav_turu,))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route('/api/rapor_ekle', methods=['POST'])
+def rapor_ekle():
+    ogrenci_id = request.form.get('ogrenci_id')
+    notlar = request.form.get('notlar', '')
+    ses_dosyasi = request.files.get('ses_dosyasi')
+    
+    filename = None
+    if ses_dosyasi:
+        filename = f"{int(datetime.now().timestamp())}_{ses_dosyasi.filename}"
+        ses_dosyasi.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        
+    tarih = datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO raporlar (ogrenci_id, notlar, ses_dosyasi, tarih) VALUES (%s, %s, %s, %s)' if DATABASE_URL.startswith("postgres") else 'INSERT INTO raporlar (ogrenci_id, notlar, ses_dosyasi, tarih) VALUES (?, ?, ?, ?)',
+                   (ogrenci_id, notlar, filename, tarih))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Rapor kaydedildi'})
+
+@app.route('/api/raporlar', methods=['GET'])
+def raporlar():
+    ogrenci_id = request.args.get('ogrenci_id')
+    conn = get_db()
+    cursor = conn.cursor()
+    query = '''
+        SELECT r.id, o.ad_soyad, o.sinif, r.notlar, r.ses_dosyasi, r.tarih 
+        FROM raporlar r 
+        JOIN ogrenciler o ON r.ogrenci_id = o.id
+    '''
+    if ogrenci_id:
+        query += ' WHERE r.ogrenci_id = %s ORDER BY r.id DESC' if DATABASE_URL.startswith("postgres") else ' WHERE r.ogrenci_id = ? ORDER BY r.id DESC'
+        cursor.execute(query, (ogrenci_id,))
+    else:
+        query += ' ORDER BY r.id DESC'
+        cursor.execute(query)
+        
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route('/api/not_sil/<int:id>', methods=['DELETE'])
+def not_sil(id):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM raporlar WHERE id = %s' if DATABASE_URL.startswith("postgres") else 'DELETE FROM raporlar WHERE id = ?', (id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({'message': 'Not silindi'})
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True)
