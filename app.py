@@ -32,7 +32,7 @@ def init_db():
             tarih TEXT,
             notlar TEXT,
             ses_dosyasi TEXT,
-            FOREIGN KEY (ogrenci_id) REFERENCES ogrenciler (id)
+            FOREIGN KEY (ogrenci_id) REFERENCES ogrenciler (id) ON DELETE CASCADE
         )
     ''')
     
@@ -44,7 +44,17 @@ def init_db():
             ay TEXT,
             tyt_net REAL,
             ayt_net REAL,
-            FOREIGN KEY (ogrenci_id) REFERENCES ogrenciler (id)
+            FOREIGN KEY (ogrenci_id) REFERENCES ogrenciler (id) ON DELETE CASCADE
+        )
+    ''')
+    
+    # Eğlence / Müzik Tablosu
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS muzikler (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            baslik TEXT NOT NULL,
+            dosya_adi TEXT NOT NULL,
+            tarih TEXT
         )
     ''')
     
@@ -54,7 +64,7 @@ def init_db():
 init_db()
 
 # ----------------------------------------------------
-# 2. ARAYÜZ (HTML / CSS / JAVASCRIPT - BLOKLU TASARIM)
+# 2. ARAYÜZ (HTML / CSS / JAVASCRIPT - BLOKLU & SİLME ÖZELLİKLİ)
 # ----------------------------------------------------
 HTML_LAYOUT = """
 <!DOCTYPE html>
@@ -70,8 +80,8 @@ HTML_LAYOUT = """
         h1 { text-align: center; color: #2c3e50; margin-bottom: 25px; }
         
         /* SEKME (BLOK) BUTONLARI */
-        .tab-buttons { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid #eee; padding-bottom: 10px; overflow-x: auto; }
-        .tab-btn { flex: 1; padding: 12px 15px; border: none; background: #e9ecef; color: #495057; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.3s; white-space: nowrap; }
+        .tab-buttons { display: flex; gap: 8px; margin-bottom: 25px; border-bottom: 2px solid #eee; padding-bottom: 10px; overflow-x: auto; }
+        .tab-btn { flex: 1; padding: 12px 10px; border: none; background: #e9ecef; color: #495057; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.3s; white-space: nowrap; font-size: 14px; }
         .tab-btn:hover { background: #dee2e6; }
         .tab-btn.active { background: #007bff; color: white; }
         
@@ -85,21 +95,26 @@ HTML_LAYOUT = """
         input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
         button.submit-btn { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-top: 10px; }
         button.submit-btn:hover { background: #218838; }
+        .delete-btn { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; float: right; }
+        .delete-btn:hover { background: #bd2130; }
         
         /* TABLOLAR VE KARTLAR */
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background: #007bff; color: white; }
-        .card { background: white; padding: 15px; border-radius: 6px; border-left: 4px solid #007bff; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .card { background: white; padding: 15px; border-radius: 6px; border-left: 4px solid #007bff; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); position: relative; }
         .card-header { font-weight: bold; color: #007bff; margin-bottom: 5px; }
         .card-date { font-size: 12px; color: #777; margin-bottom: 8px; }
         audio { width: 100%; margin-top: 10px; }
+        
+        ul.ogrenci-list { list-style: none; padding: 0; }
+        ul.ogrenci-list li { background: white; padding: 12px; margin-bottom: 8px; border-radius: 6px; border: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>🎓 Öğrenci Takip Sistemi</h1>
+    <h1>🎓 Öğrenci Takip Portalı</h1>
     
     <!-- BLOK MENÜSÜ -->
     <div class="tab-buttons">
@@ -107,9 +122,10 @@ HTML_LAYOUT = """
         <button class="tab-btn" onclick="openTab('sesli-not-block', this)">🎙️ Sesli Not Ekle</button>
         <button class="tab-btn" onclick="openTab('net-block', this)">📈 TYT / AYT Netleri</button>
         <button class="tab-btn" onclick="openTab('gecmis-notlar-block', this)">📝 Geçmiş Notlar</button>
+        <button class="tab-btn" onclick="openTab('eglence-block', this)">🎵 Eğlence & Müzik</button>
     </div>
 
-    <!-- 1. BLOK: ÖĞRENCİ EKLE & LİSTELE -->
+    <!-- 1. BLOK: ÖĞRENCİ EKLE & LİSTELE (SİLME ÖZELLİKLİ) -->
     <div id="ogrenci-block" class="tab-content active">
         <h3>Yeni Öğrenci Ekle</h3>
         <div class="form-group"><input type="text" id="adSoyad" placeholder="Öğrenci Adı Soyadı"></div>
@@ -132,7 +148,7 @@ HTML_LAYOUT = """
             <textarea id="dersNotu" rows="4" placeholder="Öğrencinin durumuyla ilgili notlar..."></textarea>
         </div>
         <div class="form-group">
-            <label>🎙️ Ses Dosyası Yükle:</label>
+            <label>🎙️️ Ses Dosyası Yükle:</label>
             <input type="file" id="sesDosyasi" accept="audio/*">
         </div>
         <button class="submit-btn" onclick="notKaydet()">Notu Kaydet</button>
@@ -186,7 +202,7 @@ HTML_LAYOUT = """
         </table>
     </div>
 
-    <!-- 4. BLOK: GEÇMİŞ NOTLAR VE SESLER -->
+    <!-- 4. BLOK: GEÇMİŞ NOTLAR VE SESLER (SİLME ÖZELLİKLİ) -->
     <div id="gecmis-notlar-block" class="tab-content">
         <h3>Öğrenciler Hakkında Yazılan Geçmiş Notlar</h3>
         <div class="form-group">
@@ -196,6 +212,24 @@ HTML_LAYOUT = """
             </select>
         </div>
         <div id="gecmisNotlarListesi"></div>
+    </div>
+
+    <!-- 5. BLOK: EĞLENCE & MÜZİK -->
+    <div id="eglence-block" class="tab-content">
+        <h3>🎵 Müzik / Eğlence Alanı</h3>
+        <p>Aşağıdan dinlemek istediğiniz şarkı veya müzik dosyalarını yükleyebilirsiniz.</p>
+        <div class="form-group">
+            <label>Müzik / Şarkı Adı:</label>
+            <input type="text" id="muzikBaslik" placeholder="Örn: Odaklanma Müzik 1">
+        </div>
+        <div class="form-group">
+            <label>Müzik Dosyası (MP3/WAV):</label>
+            <input type="file" id="muzikDosyasi" accept="audio/*">
+        </div>
+        <button class="submit-btn" onclick="muzikYukle()">Müziği Yükle</button>
+
+        <h3 style="margin-top: 30px;">Müzik Listeniz</h3>
+        <div id="muzikListesi"></div>
     </div>
 </div>
 
@@ -209,6 +243,7 @@ HTML_LAYOUT = """
         
         if(tabId === 'gecmis-notlar-block') gecmisNotlariYukle();
         if(tabId === 'net-block') netleriYukle();
+        if(tabId === 'eglence-block') muzikleriYukle();
     }
 
     // SAYFA YÜKLENİNCE
@@ -220,10 +255,13 @@ HTML_LAYOUT = """
         fetch('/api/ogrenciler')
         .then(r => r.json())
         .then(data => {
-            let html = '<ul>';
+            let html = '<ul class="ogrenci-list">';
             let selectOptions = '<option value="">-- Öğrenci Seçin --</option>';
             data.forEach(o => {
-                html += `<li><strong>${o.ad_soyad}</strong> - ${o.sinif}</li>`;
+                html += `<li>
+                    <span><strong>${o.ad_soyad}</strong> - ${o.sinif}</span>
+                    <button class="delete-btn" onclick="ogrenciSil(${o.id})">Sil</button>
+                </li>`;
                 selectOptions += `<option value="${o.id}">${o.ad_soyad} (${o.sinif})</option>`;
             });
             html += '</ul>';
@@ -252,6 +290,15 @@ HTML_LAYOUT = """
         });
     }
 
+    function ogrenciSil(id) {
+        if(!confirm('Bu öğrenciyi ve öğrenciye ait tüm notları/netleri silmek istediğinizden emin misiniz?')) return;
+        fetch('/api/ogrenci_sil/' + id, { method: 'DELETE' })
+        .then(() => {
+            ogrencileriYukle();
+            alert('Öğrenci silindi!');
+        });
+    }
+
     function notKaydet() {
         let ogrenci_id = document.getElementById('notOgrenciSelect').value;
         let notlar = document.getElementById('dersNotu').value;
@@ -271,6 +318,15 @@ HTML_LAYOUT = """
             document.getElementById('dersNotu').value = '';
             document.getElementById('sesDosyasi').value = '';
             alert('Not ve ses kaydı başarıyla kaydedildi!');
+        });
+    }
+
+    function notSil(id) {
+        if(!confirm('Bu notu silmek istediğinizden emin misiniz?')) return;
+        fetch('/api/not_sil/' + id, { method: 'DELETE' })
+        .then(() => {
+            gecmisNotlariYukle();
+            alert('Not silindi!');
         });
     }
 
@@ -320,6 +376,7 @@ HTML_LAYOUT = """
             if(data.length === 0) html = '<p>Henüz kayıtlı bir not bulunamadı.</p>';
             data.forEach(item => {
                 html += `<div class="card">
+                    <button class="delete-btn" onclick="notSil(${item.id})">Bu Notu Sil</button>
                     <div class="card-header">👤 ${item.ad_soyad} (${item.sinif})</div>
                     <div class="card-date">📅 ${item.tarih}</div>
                     <div>${item.notlar || '<i>Not metni girilmemiş.</i>'}</div>`;
@@ -329,6 +386,55 @@ HTML_LAYOUT = """
                 html += `</div>`;
             });
             document.getElementById('gecmisNotlarListesi').innerHTML = html;
+        });
+    }
+
+    // EĞLENCE & MÜZİK FONKSİYONLARI
+    function muzikYukle() {
+        let baslik = document.getElementById('muzikBaslik').value;
+        let muzikFile = document.getElementById('muzikDosyasi').files[0];
+
+        if(!baslik || !muzikFile) return alert('Lütfen müzik başlığı ve dosyasını seçin!');
+
+        let formData = new FormData();
+        formData.append('baslik', baslik);
+        formData.append('muzik', muzikFile);
+
+        fetch('/api/muzik_ekle', {
+            method: 'POST',
+            body: formData
+        }).then(() => {
+            document.getElementById('muzikBaslik').value = '';
+            document.getElementById('muzikDosyasi').value = '';
+            muzikleriYukle();
+            alert('Müzik yüklendi!');
+        });
+    }
+
+    function muzikleriYukle() {
+        fetch('/api/muzikler')
+        .then(r => r.json())
+        .then(data => {
+            let html = '';
+            if(data.length === 0) html = '<p>Henüz yüklenmiş müzik bulunmuyor.</p>';
+            data.forEach(m => {
+                html += `<div class="card">
+                    <button class="delete-btn" onclick="muzikSil(${m.id})">Sil</button>
+                    <div class="card-header">🎵 ${m.baslik}</div>
+                    <div class="card-date">📅 Yükleme Tarihi: ${m.tarih}</div>
+                    <audio controls src="/uploads/${m.dosya_adi}"></audio>
+                </div>`;
+            });
+            document.getElementById('muzikListesi').innerHTML = html;
+        });
+    }
+
+    function muzikSil(id) {
+        if(!confirm('Bu müziği silmek istediğinizden emin misiniz?')) return;
+        fetch('/api/muzik_sil/' + id, { method: 'DELETE' })
+        .then(() => {
+            muzikleriYukle();
+            alert('Müzik silindi!');
         });
     }
 </script>
@@ -366,6 +472,17 @@ def add_ogrenci():
     conn.close()
     return jsonify({"status": "ok"})
 
+@app.route('/api/ogrenci_sil/<int:id>', methods=['DELETE'])
+def delete_ogrenci(id):
+    conn = sqlite3.connect('ogretmen.db')
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM ogrenciler WHERE id = ?', (id,))
+    cursor.execute('DELETE FROM raporlar WHERE ogrenci_id = ?', (id,))
+    cursor.execute('DELETE FROM netler WHERE ogrenci_id = ?', (id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok"})
+
 @app.route('/api/not_ekle', methods=['POST'])
 def add_not():
     ogrenci_id = request.form.get('ogrenci_id')
@@ -377,63 +494,4 @@ def add_not():
         filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{ses_file.filename}"
         ses_file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         
-    tarih = datetime.now().strftime('%Y-%m-%d %H:%M')
-    
-    conn = sqlite3.connect('ogretmen.db')
-    cursor = conn.cursor()
-    cursor.execute('INSERT INTO raporlar (ogrenci_id, tarih, notlar, ses_dosyasi) VALUES (?, ?, ?, ?)',
-                   (ogrenci_id, tarih, notlar, filename))
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "ok"})
-
-@app.route('/api/net_ekle', methods=['POST'])
-def add_net():
-    data = request.json
-    conn = sqlite3.connect('ogretmen.db')
-    cursor = conn.cursor()
-    cursor.execute('INSERT INTO netler (ogrenci_id, ay, tyt_net, ayt_net) VALUES (?, ?, ?, ?)',
-                   (data['ogrenci_id'], data['ay'], data['tyt_net'], data['ayt_net']))
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "ok"})
-
-@app.route('/api/netler', methods=['GET'])
-def get_netler():
-    conn = sqlite3.connect('ogretmen.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT o.ad_soyad, n.ay, n.tyt_net, n.ayt_net 
-        FROM netler n 
-        JOIN ogrenciler o ON n.ogrenci_id = o.id 
-        ORDER BY n.id DESC
-    ''')
-    rows = cursor.fetchall()
-    conn.close()
-    return jsonify([{"ad_soyad": r[0], "ay": r[1], "tyt_net": r[2], "ayt_net": r[3]} for r in rows])
-
-@app.route('/api/gecmis_notlar', methods=['GET'])
-def get_gecmis_notlar():
-    ogrenci_id = request.args.get('ogrenci_id')
-    conn = sqlite3.connect('ogretmen.db')
-    cursor = conn.cursor()
-    
-    query = '''
-        SELECT o.ad_soyad, o.sinif, r.tarih, r.notlar, r.ses_dosyasi 
-        FROM raporlar r 
-        JOIN ogrenciler o ON r.ogrenci_id = o.id 
-    '''
-    params = []
-    if ogrenci_id:
-        query += ' WHERE r.ogrenci_id = ? '
-        params.append(ogrenci_id)
-        
-    query += ' ORDER BY r.id DESC'
-    
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
-    return jsonify([{"ad_soyad": r[0], "sinif": r[1], "tarih": r[2], "notlar": r[3], "ses_dosyasi": r[4]} for r in rows])
-
-if __name__ == '__main__':
-    app.run(debug=True)
+    tarih = datetime.now().strfti
