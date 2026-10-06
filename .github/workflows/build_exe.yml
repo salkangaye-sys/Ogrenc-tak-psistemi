@@ -24,7 +24,7 @@ jobs:
 
     - name: EXE Derle
       run: |
-        pyinstaller --noconfirm --onedir --windowed --add-data "templates;templates" --add-data "static;static" app.py
+        pyinstaller --noconfirm --onedir --windowed --add-data "templates;templates" app.py
 
     - name: EXE Dosyasını İndirilebilir Yap
       uses: actions/upload-artifact@v4
