@@ -244,3 +244,15 @@ def not_sil(id):
 
 if __name__ == '__main__':
     app.run(debug=True)
+import webview
+import threading
+
+def start_desktop():
+    # Arka planda Flask'ı başlatır
+    threading.Thread(target=lambda: app.run(port=5000, debug=False, use_reloader=False), daemon=True).start()
+    # Masaüstü penceresi açar
+    webview.create_window('Öğrenci Takip Sistemi', 'http://127.0.0.1:5000')
+    webview.start()
+
+if __name__ == '__main__':
+    start_desktop()
