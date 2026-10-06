@@ -1,0 +1,33 @@
+name: EXE Oluşturucu
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Python Kurulumu
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Kütüphaneleri Yükle
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: EXE Derle
+      run: |
+        pyinstaller --noconfirm --onedir --windowed --add-data "templates;templates" --add-data "static;static" app.py
+
+    - name: EXE Dosyasını İndirilebilir Yap
+      uses: actions/upload-artifact@v3
+      with:
+        name: OgrenciTakipSistemi-Windows-EXE
+        path: dist/app/
