@@ -24,10 +24,10 @@ jobs:
 
     - name: EXE Derle
       run: |
-        pyinstaller --noconfirm --onedir --windowed --add-data "templates;templates" app.py
+        pyinstaller --noconfirm --onefile --windowed --add-data "templates;templates" app.py
 
     - name: EXE Dosyasını İndirilebilir Yap
       uses: actions/upload-artifact@v4
       with:
         name: OgrenciTakipSistemi-Windows-EXE
-        path: dist/app/
+        path: dist/app.exe
