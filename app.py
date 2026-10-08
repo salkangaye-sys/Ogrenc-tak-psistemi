@@ -3,7 +3,19 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, send_from_directory
+import os
+import sys
 
+# Executable dosyasının gerçekten bulunduğu klasörü bul
+if getattr(sys, 'frozen', False):
+    # PyInstaller tek dosya (.exe / Linux binary) modunda
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    # Normal Python script olarak çalışırken
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Veritabanı yolunu uygulamanın çalıştığı ana klasöre sabitle
+DB_PATH = os.path.join(BASE_DIR, 'ogretmen.db')
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -18,7 +30,7 @@ def get_db():
         return conn
     else:
         import sqlite3
-        conn = sqlite3.connect('ogretmen.db')
+        conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         return conn
 
